@@ -41,6 +41,8 @@
     color: var(--text-light);
     font-family: var(--font-body);
     overflow-x:hidden;
+    touch-action: pan-y;
+    -webkit-text-size-adjust: 100%;
   }
   #snow-bg{
     position:fixed; inset:0; pointer-events:none; z-index:0;
@@ -312,7 +314,7 @@
     <span><i style="background:var(--barn-red)"></i>Амбар (финиш)</span>
   </div>
 
-  <p class="hint" id="hint">Стрелки / WASD или кнопки ниже. Собирайте появляющийся урожай и доведите комбайн до амбара, набрав нужный счёт.</p>
+  <p class="hint" id="hint">Стрелки / WASD, свайп по полю или кнопки ниже. Собирайте появляющийся урожай и доведите комбайн до амбара, набрав нужный счёт.</p>
 </div>
 
 <div class="modal-overlay" id="winModal" hidden>
@@ -344,6 +346,18 @@
 <script>
 (function(){
   "use strict";
+
+  // iOS Safari ignores viewport user-scalable=no for accessibility reasons, so pinch-zoom
+  // can still trigger and get "stuck" mid-gameplay. Block it explicitly at the JS level too.
+  ['gesturestart','gesturechange','gestureend'].forEach(evt=>{
+    document.addEventListener(evt, e => e.preventDefault());
+  });
+  let lastTouchEnd = 0;
+  document.addEventListener('touchend', (e) => {
+    const now = Date.now();
+    if(now - lastTouchEnd <= 300){ e.preventDefault(); } // block double-tap-to-zoom
+    lastTouchEnd = now;
+  }, { passive:false });
 
   // ---------- Levels ----------
   // Legend: . floor | # rock | ~ ice (slides) | m mud (+1 move) | p pit (instant fail) | B barn (opens at targetScore)
@@ -724,6 +738,8 @@
   function startMusic(){
     ensureAudio();
     if(musicTimer) return;
+    playMusicNote(); // fire the first note synchronously — iOS only unlocks audio if a sound
+                      // actually starts inside the user gesture, not merely a scheduled one
     musicTimer = setInterval(playMusicNote, 330);
   }
   function stopMusic(){
@@ -773,7 +789,7 @@
     const hasEnemies = enemies.length > 0;
     const hasSafeZones = (lvl.safeZones||[]).length > 0;
     document.getElementById('hint').textContent = idx===0
-      ? "Стрелки / WASD или кнопки ниже. Урожай появляется и исчезает сам — собирайте его и набирайте нужный счёт, чтобы открыть амбар. Ямы — впереди, в них нельзя падать!"
+      ? "Стрелки / WASD, свайп по полю или кнопки ниже. Урожай появляется и исчезает сам — собирайте его и набирайте нужный счёт, чтобы открыть амбар. Ямы — впереди, в них нельзя падать!"
       : idx===1
       ? "На льду комбайн скользит, пока не встретит препятствие — планируйте путь заранее. Грязь стоит лишнего хода, яма — конец уровня."
       : lvl.boss
@@ -1720,6 +1736,37 @@
     });
   });
   document.getElementById('waitBtn').addEventListener('click', ()=>{ ensureAudio(); honk(); });
+
+  // ---------- Swipe controls (mobile): one swipe = one cell move ----------
+  (function setupSwipe(){
+    const SWIPE_THRESHOLD = 24; // px — below this, treat as a tap/misfire and ignore
+    let sx = 0, sy = 0, active = false;
+
+    canvas.addEventListener('touchstart', (e) => {
+      if(e.touches.length !== 1) { active = false; return; } // ignore multi-touch (pinch etc.)
+      ensureAudio();
+      const t = e.touches[0];
+      sx = t.clientX; sy = t.clientY;
+      active = true;
+    }, { passive: true });
+
+    canvas.addEventListener('touchend', (e) => {
+      if(!active) return;
+      active = false;
+      const t = e.changedTouches[0];
+      const dx = t.clientX - sx;
+      const dy = t.clientY - sy;
+      const absX = Math.abs(dx), absY = Math.abs(dy);
+      if(Math.max(absX, absY) < SWIPE_THRESHOLD) return; // too short — ignore
+      if(absX > absY){
+        tryMove(dx > 0 ? 1 : -1, 0);
+      } else {
+        tryMove(0, dy > 0 ? 1 : -1);
+      }
+    }, { passive: true });
+
+    canvas.addEventListener('touchcancel', () => { active = false; }, { passive: true });
+  })();
 
   document.getElementById('restartBtn').addEventListener('click', ()=>loadLevel(levelIndex));
   document.getElementById('retryBtn').addEventListener('click', ()=>{
