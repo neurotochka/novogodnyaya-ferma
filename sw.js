@@ -1,7 +1,7 @@
 // Service worker for "Новогодняя ферма" — caches the game shell so it works offline
 // and can be launched as an installed app.
 
-const CACHE_NAME = 'novogodnyaya-ferma-v2';
+const CACHE_NAME = 'novogodnyaya-ferma-v3';
 const ASSETS = [
   './',
   './index.html',
