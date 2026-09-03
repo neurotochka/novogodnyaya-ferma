@@ -62,6 +62,14 @@
     font-size: 12px; letter-spacing: 3px; text-transform:uppercase;
     color: var(--gold-light); font-weight:600; margin-bottom:6px;
   }
+  .brand-eyebrow{
+    display:flex; align-items:center; justify-content:center;
+    margin-bottom:10px;
+  }
+  .brand-logo{
+    height:30px; width:auto; max-width:180px; object-fit:contain;
+    background:#fff; padding:5px 12px; border-radius:8px;
+  }
   h1{
     font-family: var(--font-display);
     font-size: clamp(28px, 6vw, 40px);
@@ -87,6 +95,7 @@
     cursor:pointer;
     transition: all 0.15s ease;
     display:flex; align-items:center; gap:6px;
+    touch-action: manipulation;
   }
   .level-tab:hover{ background: rgba(255,255,255,0.12); }
   .level-tab.active{
@@ -138,6 +147,7 @@
     font-size:18px; cursor:pointer;
     display:flex; align-items:center; justify-content:center;
     transition: background 0.1s ease, transform 0.05s ease;
+    touch-action: manipulation;
   }
   .dpad button:active{ background: var(--gold); color:#3A2405; transform: scale(0.94); }
   .dpad .up{grid-column:2; grid-row:1;}
@@ -158,6 +168,7 @@
     border: 1px solid rgba(255,255,255,0.16);
     color: var(--text-light);
     padding: 9px 16px; border-radius: 10px; cursor:pointer;
+    touch-action: manipulation;
   }
   .btn:hover{ background: rgba(255,255,255,0.16); }
   .btn.primary{ background: var(--gold); color:#3A2405; border-color: var(--gold); }
@@ -180,6 +191,7 @@
     border: 1px solid rgba(255,255,255,0.16);
     color: var(--text-light); font-size:16px; cursor:pointer;
     display:flex; align-items:center; justify-content:center;
+    touch-action: manipulation;
   }
   .icon-btn:hover{ background: rgba(255,255,255,0.16); }
   .icon-btn.muted{ opacity:0.5; }
@@ -249,7 +261,11 @@
 <div class="start-screen" id="startScreen">
   <div class="start-card">
     <div class="start-badge">🚜</div>
-    <div class="eyebrow">Прототип игры · Агролига</div>
+    <div class="brand-eyebrow">
+      <img src="agroliga-logo.png" alt="Агролига" class="brand-logo"
+           onerror="this.style.display='none'; this.nextElementSibling.style.display='block';">
+      <div class="eyebrow" style="display:none; margin-bottom:0;">Агролига</div>
+    </div>
     <h1><span class="flake">❄</span> Новогодняя ферма</h1>
     <p class="subtitle">2D‑головоломка про комбайн, урожай и амбар, полный подарков к Новому году</p>
     <div class="start-features">
@@ -262,12 +278,19 @@
       <button class="icon-btn" id="soundToggleStart" title="Звук"><span class="sound-icon">🔊</span></button>
       <button class="btn" id="installBtn" style="display:none;">⬇ Установить</button>
     </div>
+    <p id="iosInstallHint" style="display:none; margin-top:14px; font-size:12px; color:var(--text-dim); max-width:280px;">
+      Чтобы установить: нажмите <b>Поделиться</b> <span style="opacity:0.8">(значок ⬆︎ внизу экрана)</span> → <b>«На экран Домой»</b>
+    </p>
   </div>
 </div>
 
 <div class="page">
   <header>
-    <div class="eyebrow">Прототип игры · Агролига</div>
+    <div class="brand-eyebrow">
+      <img src="agroliga-logo.png" alt="Агролига" class="brand-logo"
+           onerror="this.style.display='none'; this.nextElementSibling.style.display='block';">
+      <div class="eyebrow" style="display:none; margin-bottom:0;">Агролига</div>
+    </div>
     <h1><span class="flake">❄</span> Новогодняя ферма</h1>
     <p class="subtitle">2D‑головоломка: собери урожай комбайном и доберись до амбара</p>
   </header>
@@ -348,16 +371,12 @@
   "use strict";
 
   // iOS Safari ignores viewport user-scalable=no for accessibility reasons, so pinch-zoom
-  // can still trigger and get "stuck" mid-gameplay. Block it explicitly at the JS level too.
+  // could still trigger. touch-action:pan-y (CSS) already blocks it; this covers Safari's
+  // legacy gesture events too. Deliberately NOT intercepting touchend globally — that broke
+  // rapid taps on the on-screen d-pad by eating the synthesized click event.
   ['gesturestart','gesturechange','gestureend'].forEach(evt=>{
     document.addEventListener(evt, e => e.preventDefault());
   });
-  let lastTouchEnd = 0;
-  document.addEventListener('touchend', (e) => {
-    const now = Date.now();
-    if(now - lastTouchEnd <= 300){ e.preventDefault(); } // block double-tap-to-zoom
-    lastTouchEnd = now;
-  }, { passive:false });
 
   // ---------- Levels ----------
   // Legend: . floor | # rock | ~ ice (slides) | m mud (+1 move) | p pit (instant fail) | B barn (opens at targetScore)
@@ -712,43 +731,144 @@
     beep(880,0.1,'sine',0.14); beep(1200,0.12,'sine',0.1,0.05); beep(600,0.15,'sine',0.08,0.1);
   }
 
-  // ---------- Ambient background music ----------
-  // Original festive winter melody with a sleigh-bell shimmer layer (synthesized, no external audio files).
-  const MUSIC_SCALE = [293.66, 329.63, 369.99, 392.00, 440.00, 493.88, 554.37, 587.33]; // D major — bright & festive
-  const MUSIC_PATTERN = [4,4,4,4,4,2,4,6, 7,7,6,4,3,1,2,0]; // original bouncy melody, not a known tune
-  const BELL_NOTES = [1046.50, 1174.66]; // C6/D6 — sleigh-bell shimmer
-  let musicStep = 0;
-  let musicTimer = null;
-  function playMusicNote(){
-    if(!musicOn || !audioCtx) return;
-    const idx = MUSIC_PATTERN[musicStep % MUSIC_PATTERN.length];
-    const freq = MUSIC_SCALE[idx % MUSIC_SCALE.length];
-    // main melody note
-    beep(freq, 0.3, 'triangle', 0.09);
-    // warm pad underneath, once per bar
-    if(musicStep % 4 === 0){
-      beep(freq/2, 0.5, 'sine', 0.05);
+  // ---------- Background music: 8-bit playlist, rotates by level group ----------
+  // All four tracks are public domain (see composer/death-year checks) or original compositions.
+  // Classic chiptune arrangement: square-wave lead + triangle-wave bass + light pulse percussion.
+
+  // Track 1 — "Jingle Bells" (J.L. Pierpont, 1857 — public domain). Levels 1-3.
+  const jbE5=659.25, jbF5=698.46, jbG5=783.99, jbC5=523.25, jbD5=587.33;
+  const TRACK_JINGLE = {
+    bpm: 132,
+    melody: [
+      [jbE5,1],[jbE5,1],[jbE5,2],
+      [jbE5,1],[jbE5,1],[jbE5,2],
+      [jbE5,1],[jbG5,1],[jbC5,1],[jbD5,1],
+      [jbE5,4],
+      [jbF5,1],[jbF5,1],[jbF5,1],[jbF5,1],
+      [jbF5,1],[jbE5,1],[jbE5,1],[jbE5,1],
+      [jbE5,1],[jbD5,1],[jbD5,1],[jbE5,1],
+      [jbD5,2],[jbG5,2],
+    ],
+    bass: [
+      [130.81,4], [130.81,4], [196.00,4], [130.81,4],
+      [174.61,4], [174.61,4], [130.81,2],[196.00,2], [196.00,4],
+    ],
+  };
+
+  // Track 2 — "В лесу родилась ёлочка" (Л. Бекман, ум. 1939 — права на музыку истекли в 2009). Levels 4-6.
+  const elC5=523.25, elD5=587.33, elE5=659.25, elF5=698.46, elG5=783.99, elA5=880.00, elG4=392.00;
+  const TRACK_ELOCHKA = {
+    bpm: 189,
+    melody: [
+      [elG4,1],[elE5,1],[elE5,1],[elD5,1],[elE5,1],[elC5,1],[elG4,1],[elG4,2],
+      [elG4,1],[elE5,1],[elE5,1],[elF5,1],[elD5,1],[elG5,2],
+      [elG5,1],[elA5,1],[elA5,1],[elF5,1],[elF5,1],[elE5,1],[elD5,1],[elC5,2],
+      [elG4,1],[elE5,1],[elE5,1],[elD5,1],[elE5,1],[elC5,4],
+    ],
+    bass: [
+      [130.81,9],
+      [196.00,7],
+      [130.81,4],[174.61,5],
+      [130.81,9],
+    ],
+  };
+
+  // Track 3 — "We Wish You a Merry Christmas" (traditional English carol, author unknown — public domain). Levels 7-9.
+  const wwD5=587.33, wwFs5=739.99, wwG5=783.99, wwA5=880.00, wwB5=987.77, wwC6=1046.50, wwE5=659.25;
+  const TRACK_WEWISH = {
+    bpm: 198,
+    melody: [
+      [wwD5,1],[wwG5,1],[wwG5,1],[wwA5,1],[wwG5,1],[wwFs5,1],[wwE5,2],
+      [wwD5,1],[wwG5,1],[wwG5,1],[wwA5,1],[wwG5,1],[wwFs5,1],[wwE5,2],
+      [wwD5,1],[wwB5,1],[wwB5,1],[wwC6,1],[wwB5,1],[wwA5,1],[wwG5,2],
+      [wwE5,1],[wwC6,1],[wwB5,1],[wwA5,1],[wwG5,4],
+    ],
+    bass: [
+      [196.00,8],
+      [196.00,8],
+      [130.81,4],[196.00,4],
+      [261.63,4],[196.00,4],
+    ],
+  };
+
+  // Track 4 — "Праздничный галоп" (original composition). Levels 10-13.
+  const pgG4=392.00, pgA4=440.00, pgB4=493.88, pgC5=523.25, pgD5=587.33, pgG5=783.99;
+  const TRACK_GALLOP = {
+    bpm: 150,
+    melody: [
+      [pgG4,0.5],[pgA4,0.5],[pgB4,1],[pgG4,0.5],[pgA4,0.5],[pgB4,1],
+      [pgD5,0.5],[pgB4,0.5],[pgG5,1],[pgD5,0.5],[pgB4,0.5],[pgA4,1],
+      [pgG4,0.5],[pgA4,0.5],[pgB4,1],[pgC5,0.5],[pgB4,0.5],[pgA4,1],
+      [pgB4,0.5],[pgA4,0.5],[pgG4,2],
+    ],
+    bass: [
+      [196.00,4],
+      [146.83,4],
+      [196.00,4],
+      [130.81,3],
+    ],
+  };
+
+  const PLAYLIST = [TRACK_JINGLE, TRACK_ELOCHKA, TRACK_WEWISH, TRACK_GALLOP];
+  // Maps a level index (0-based) to a playlist track: levels 1-3, 4-6, 7-9, 10-13.
+  function trackForLevel(idx){
+    if(idx <= 2) return PLAYLIST[0];
+    if(idx <= 5) return PLAYLIST[1];
+    if(idx <= 8) return PLAYLIST[2];
+    return PLAYLIST[3];
+  }
+
+  let songTimer = null;
+  let currentTrack = null;
+
+  function scheduleSong(){
+    if(!musicOn || !audioCtx || !currentTrack) return;
+    const beatSec = 60 / currentTrack.bpm;
+    let t = 0;
+    currentTrack.melody.forEach(([freq,beats])=>{
+      const dur = beats*beatSec;
+      beep(freq, dur*0.85, 'square', 0.08, t);
+      t += dur;
+    });
+    let tb = 0;
+    currentTrack.bass.forEach(([freq,beats])=>{
+      const dur = beats*beatSec;
+      beep(freq, dur*0.95, 'triangle', 0.05, tb);
+      tb += dur;
+    });
+    const totalBeats = currentTrack.melody.reduce((sum,[,b])=>sum+b, 0);
+    for(let b=0; b<totalBeats*2; b++){
+      const accent = (b % 2 === 0);
+      beep(accent ? 150 : 1050, 0.04, 'square', accent ? 0.048 : 0.026, b*beatSec*0.5);
     }
-    // sleigh-bell shimmer on every step — the festive signature
-    const bell = BELL_NOTES[musicStep % 2];
-    beep(bell, 0.08, 'square', 0.032, 0.02);
-    beep(bell*1.2, 0.06, 'square', 0.018, 0.05);
-    musicStep++;
+    const totalDur = totalBeats * beatSec;
+    songTimer = setTimeout(scheduleSong, totalDur * 1000);
   }
   function startMusic(){
     ensureAudio();
-    if(musicTimer) return;
-    playMusicNote(); // fire the first note synchronously — iOS only unlocks audio if a sound
-                      // actually starts inside the user gesture, not merely a scheduled one
-    musicTimer = setInterval(playMusicNote, 330);
+    if(!currentTrack) currentTrack = trackForLevel(levelIndex);
+    if(songTimer) return;
+    scheduleSong(); // fires the first notes synchronously within the gesture (iOS audio unlock)
   }
   function stopMusic(){
-    if(musicTimer){ clearInterval(musicTimer); musicTimer = null; }
+    if(songTimer){ clearTimeout(songTimer); songTimer = null; }
   }
   function setMusicOn(on){
     musicOn = on;
     document.querySelectorAll('.sound-icon').forEach(el=>{ el.textContent = on ? '🔊' : '🔇'; });
     if(on) startMusic(); else stopMusic();
+  }
+  // Called from loadLevel() whenever the level changes — swaps the track only if the
+  // new level belongs to a different group, and lets the current phrase finish first.
+  function updateMusicForLevel(idx){
+    const next = trackForLevel(idx);
+    if(next !== currentTrack){
+      currentTrack = next;
+      if(musicOn && songTimer){
+        stopMusic();
+        startMusic();
+      }
+    }
   }
 
   // ---------- Level setup ----------
@@ -763,6 +883,7 @@
     stopIntervals();
     levelSession++;
     levelIndex = idx;
+    updateMusicForLevel(idx);
     const lvl = LEVELS[idx];
     grid = lvl.grid.map(row => row.split(''));
     rows = grid.length; cols = grid[0].length;
@@ -1827,6 +1948,16 @@ window.addEventListener('appinstalled', () => {
   const btn = document.getElementById('installBtn');
   if (btn) btn.style.display = 'none';
 });
+
+// iOS Safari has no beforeinstallprompt API at all — there is no programmatic install
+// prompt on iOS. Detect it and show manual "Share → Add to Home Screen" instructions
+// instead of a button that would never appear there.
+const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
+const isInStandaloneMode = window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true;
+if (isIOS && !isInStandaloneMode) {
+  const hint = document.getElementById('iosInstallHint');
+  if (hint) hint.style.display = 'block';
+}
 </script>
 </body>
 </html>
