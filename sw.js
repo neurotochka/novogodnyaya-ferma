@@ -1,7 +1,7 @@
 // Service worker for "Новогодняя ферма" — caches the game shell so it works offline
 // and can be launched as an installed app.
 
-const CACHE_NAME = 'novogodnyaya-ferma-v1';
+const CACHE_NAME = 'novogodnyaya-ferma-v2';
 const ASSETS = [
   './',
   './index.html',
@@ -10,6 +10,7 @@ const ASSETS = [
   './icon-512.png',
   './icon-maskable-512.png',
   './apple-touch-icon.png',
+  './agroliga-logo.png',
 ];
 
 self.addEventListener('install', (event) => {
